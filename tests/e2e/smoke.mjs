@@ -1,0 +1,153 @@
+// Browser smoke tests for the isolated synthetic demo. Run against a separately started server.
+// Optional CHROMIUM_PATH points to a locally installed Chromium binary.
+import { chromium, expect } from '@playwright/test';
+import assert from 'node:assert/strict';
+
+const base = process.env.E2E_BASE_URL || 'http://127.0.0.1:3000';
+const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+const page = await context.newPage();
+const errors = [];
+page.on('pageerror', (e) => errors.push(e.message));
+const check = (message) => console.log(`PASS ${message}`);
+const open = async (targetPage, url) => { await targetPage.goto(url, {waitUntil:'domcontentloaded'}); await targetPage.locator('[data-demo-ready="true"]').waitFor(); };
+try {
+  await open(page, base);
+  await expect(page.locator('h1:visible')).toContainText('Um novo lugar');
+  await expect(page.getByText('dados fictícios', { exact: false }).first()).toBeVisible();
+  check('home and synthetic-data notice');
+
+  await open(page, `${base}/homes`);
+  await page.locator('.gw-filter-panel select[name="transaction"]').selectOption('mid');
+  await page.locator('.gw-filter-panel button[type="submit"]').click();
+  await expect(page).toHaveURL(/transaction=mid/);
+  await expect(page.locator('.gw-property-card')).toHaveCount(2);
+  await page.getByRole('link', { name: 'Ver imóvel: Apartamento da Graça' }).first().click();
+  await expect(page.locator('h1:visible')).toContainText('Apartamento da Graça');
+  await page.locator('.gw-detail-actions').getByRole('button', { name: 'Guardar favorito' }).click();
+  await page.locator('.gw-detail-actions').getByRole('button', { name: 'Comparar', exact: true }).click();
+  await page.getByRole('button', { name: 'Imagem seguinte' }).click();
+  await expect(page.locator('.gw-gallery-label')).toContainText('2 / 2');
+  check('mid-term search, shareable filter URL, detail, gallery, favorite and comparison');
+
+  const form = page.locator('.gw-inquiry-form');
+  await form.getByRole('button', { name: 'Criar pedido de demonstração' }).click();
+  await expect(form.getByRole('alert')).toBeVisible();
+  await form.locator('[name=name]').fill('Alex Demo');
+  await form.locator('[name=email]').fill('alex@example.test');
+  await form.locator('[name=origin]').fill('France');
+  await form.locator('[name=arrival]').fill('2027-01-15');
+  await form.locator('[name=kind]').selectOption('viewing');
+  await form.locator('[name=message]').fill('A fictional viewing request.');
+  await form.getByRole('button', { name: 'Criar pedido de demonstração' }).click();
+  await expect(page.getByText('Pedido de demonstração criado neste navegador.')).toBeVisible();
+  await page.getByRole('link', { name: 'Abrir negócio' }).click();
+  await expect(page.locator('h1:visible')).toHaveText('Alex Demo');
+  const dealUrl = page.url();
+  await expect(page.locator('.gw-score-number')).toContainText('50');
+  check('validated viewing inquiry creates a browser-local deal');
+
+  const identity = page.locator('.gw-document-row').filter({ hasText: 'Identificação' });
+  await identity.locator('input[type=file]').setInputFiles({name:'sample.txt',mimeType:'text/plain',buffer:Buffer.from('demo')});
+  await expect(identity.getByRole('alert')).toContainText('PDF');
+  await identity.locator('input[type=file]').setInputFiles({name:'sample.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4 synthetic')});
+  await expect(identity.getByText('Por rever', {exact:true})).toBeVisible();
+  await identity.getByRole('button', {name:'Aceitar'}).click();
+  await expect(identity.getByText('Aceite', {exact:true})).toBeVisible();
+  await expect(page.locator('.gw-score-number')).toContainText('67');
+  await expect(page.getByText('Decisão de revisão registada').first()).toBeVisible();
+  await page.locator('.gw-stage-select select').selectOption('documents');
+  await expect(page.getByText('Estado atualizado').first()).toBeVisible();
+  await page.locator('.gw-lifecycle-item').filter({hasText:'Inventário de entrada'}).getByRole('button').click();
+  await expect(page.getByText('Ciclo do arrendamento atualizado').first()).toBeVisible();
+  await page.reload({waitUntil:'domcontentloaded'}); await page.locator('[data-demo-ready="true"]').waitFor();
+  await expect(page.locator('.gw-score-number')).toContainText('67');
+  check('file validation, simulated upload, human review, score recalculation, status/lifecycle audit and reload');
+
+  await open(page, `${base}/workspace/deals/DR-2401`);
+  await expect(page.locator('.gw-score-number')).toContainText('50');
+  await page.getByRole('button',{name:'Marcar como revisto'}).click();
+  await expect(page.locator('.gw-score-number')).toContainText('67');
+  await expect(page.getByText('Divergência revista').first()).toBeVisible();
+  check('synthetic discrepancy review updates readiness and timeline');
+
+  await open(page, `${base}/saved`);
+  await expect(page.getByRole('heading',{name:'Apartamento da Graça'})).toBeVisible();
+  await open(page, `${base}/compare`);
+  await expect(page.locator('.gw-compare-table')).toContainText('Apartamento da Graça');
+  check('favorites and comparison persist across navigation');
+
+  await open(page, `${base}/workspace/properties`);
+  await page.getByRole('button',{name:'Adicionar imóvel'}).click();
+  const propertyForm = page.locator('.gw-edit-property');
+  await propertyForm.locator('[name=title]').fill('Casa Exemplo');
+  await propertyForm.locator('[name=city]').fill('Coimbra');
+  await propertyForm.locator('[name=price]').fill('1200');
+  await propertyForm.getByRole('button',{name:'Guardar'}).click();
+  await expect(page.getByText('Casa Exemplo')).toBeVisible();
+  await page.reload({waitUntil:'domcontentloaded'}); await page.locator('[data-demo-ready="true"]').waitFor();
+  await expect(page.getByText('Casa Exemplo')).toBeVisible();
+  const createdRow = page.locator('.gw-property-management-row').filter({hasText:'Casa Exemplo'});
+  await createdRow.getByRole('button',{name:'Editar'}).click();
+  await page.locator('.gw-edit-property [name=price]').fill('1300');
+  await page.locator('.gw-edit-property').getByRole('button',{name:'Guardar'}).click();
+  await expect(createdRow).toContainText(/1\s?300/);
+  await createdRow.getByRole('link',{name:'Ver imóvel'}).click();
+  await expect(page.locator('h1:visible')).toHaveText('Casa Exemplo');
+  await page.reload({waitUntil:'domcontentloaded'}); await page.locator('[data-demo-ready="true"]').waitFor();
+  await expect(page.locator('h1:visible')).toHaveText('Casa Exemplo');
+  check('sample property creation, editing, detail and browser-local persistence');
+
+  await open(page, `${base}/workspace/deals`);
+  await page.locator('.gw-inline-search input').fill('Alex Demo');
+  await expect(page.locator('.gw-data-table tbody tr')).toHaveCount(1);
+  const download = page.waitForEvent('download');
+  await page.getByRole('button',{name:'Exportar CSV'}).click();
+  assert.equal((await download).suggestedFilename(),'gw-dealready-demo.csv');
+  check('deal search and CSV export');
+
+  await open(page, `${base}/workspace/account`);
+  await page.getByRole('button',{name:'Simular plano Essencial'}).click();
+  await open(page, `${base}/workspace/documents`);
+  await expect(page.getByText('Funcionalidade demonstrada no Pro')).toBeVisible();
+  await open(page, `${base}/workspace/account`);
+  await page.getByRole('button',{name:'Simular plano Pro'}).click();
+  await open(page, `${base}/workspace/documents`);
+  await expect(page.locator('.gw-list-rows')).toBeVisible();
+  check('simulated free/Pro switch and locked explanation');
+
+  const api = await page.request.get(`${base}/api/admin/records?type=properties`);
+  assert.equal(api.status(),401);
+  const missing = await page.request.get(`${base}/homes/not-a-real-property`);
+  assert.equal(missing.status(),404);
+  const otherContext = await browser.newContext();
+  const otherPage = await otherContext.newPage();
+  await open(otherPage,dealUrl);
+  await expect(otherPage.getByText('Não encontramos esta página.')).toBeVisible();
+  await otherContext.close();
+  check('upstream admin API rejects unauthenticated access; local-only demo record is absent in a clean browser; unknown listing returns 404');
+
+  const mobile = await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  const mobilePage = await mobile.newPage();
+  mobilePage.on('pageerror', (e)=>errors.push(e.message));
+  await open(mobilePage,base);
+  await mobilePage.getByRole('button',{name:'Abrir menu'}).click();
+  await expect(mobilePage.locator('.gw-mobile-nav')).toBeVisible();
+  await mobilePage.locator('.gw-header-actions select').selectOption('ar');
+  await expect(mobilePage.locator('html')).toHaveAttribute('dir','rtl');
+  await expect(mobilePage.locator('html')).toHaveAttribute('lang','ar');
+  await open(mobilePage,`${base}/workspace`);
+  await mobilePage.locator('.gw-workspace-menu').click();
+  await expect(mobilePage.locator('.gw-sidebar')).toHaveClass(/is-open/);
+  const overflow = await mobilePage.evaluate(()=>document.documentElement.scrollWidth > window.innerWidth + 1);
+  assert.equal(overflow,false,'mobile document must not overflow horizontally');
+  if(process.env.E2E_SCREENSHOT) await mobilePage.screenshot({path:process.env.E2E_SCREENSHOT,fullPage:true});
+  await mobile.close();
+  check('mobile navigation and Arabic RTL');
+
+  assert.deepEqual(errors,[],'no uncaught browser errors');
+  check('no uncaught browser errors');
+} finally {
+  await context.close();
+  await browser.close();
+}

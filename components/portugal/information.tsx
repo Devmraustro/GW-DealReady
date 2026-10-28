@@ -1,0 +1,17 @@
+'use client';
+import Link from 'next/link';
+import { ArrowUpRight, Check, FileCheck2, ShieldCheck, ListChecks } from 'lucide-react';
+import { useMarket } from '@/lib/portugal/i18n';
+import { usePortugalDemo } from '@/lib/portugal/store';
+import { InquiryForm } from './inquiry';
+
+export function Plans() {
+  const { t } = useMarket(); const { plan, setPlan } = usePortugalDemo();
+  return <div className="gw-page gw-container"><div className="gw-centered-heading"><div className="gw-eyebrow"><span/> {t('planEyebrow')}</div><h1>{t('planTitle')}</h1><p>{t('planText')}</p></div><div className="gw-plan-grid">{(['free','pro'] as const).map((p)=><div className={`gw-plan-card ${p === 'pro' ? 'gw-plan-pro' : ''}`} key={p}><div className="gw-plan-top"><span>{t(p)}</span>{plan === p && <small>{t('currentPlan')}</small>}</div><h2>{t(p)}</h2><p>{t(p === 'free' ? 'freeText' : 'proText')}</p><strong>{t('priceDemo')}</strong><div className="gw-plan-divider"/><ul>{(p === 'free' ? ['freeFeature1','freeFeature2'] as const : ['freeFeature1','freeFeature2','proFeature1','proFeature2','proFeature3'] as const).map((key)=><li key={key}><Check size={17}/>{t(key)}</li>)}</ul><button type="button" className={`gw-button gw-full ${p === 'pro' ? 'gw-button-teal' : 'gw-button-outline'}`} onClick={()=>setPlan(p)}>{t(p === 'pro' ? 'choosePro' : 'chooseFree')}</button></div>)}</div><p className="gw-plan-disclaimer">{t('planSimulation')} {t('lockedText')}</p><div className="gw-center"><Link className="gw-button gw-button-dark" href="/workspace">{t('openDemo')} <ArrowUpRight size={16}/></Link></div></div>;
+}
+export function DealReadyIntro() {
+  const { t } = useMarket();
+  return <div><section className="gw-intro-hero"><div className="gw-container"><div className="gw-eyebrow light"><span/> {t('readyEyebrow')}</div><h1>{t('readyTitle')}</h1><p>{t('readyText')}</p><Link href="/workspace" className="gw-button gw-button-light">{t('openDemo')} <ArrowUpRight size={17}/></Link></div></section><section className="gw-section gw-container"><div className="gw-audience-grid">{[{icon:ListChecks,title:'readyPoint1' as const},{icon:FileCheck2,title:'readyPoint2' as const},{icon:ShieldCheck,title:'readyPoint3' as const}].map(({icon:Icon,title},i)=><div className="gw-audience-card" key={title}><div><Icon size={24}/><span>0{i+1}</span></div><h3>{t(title)}</h3><p>{t('scoreDisclaimer')}</p></div>)}</div><div className="gw-info-callout">{t('trustText')}</div></section></div>;
+}
+export function InfoPage({ page }: { page: 'privacy' | 'terms' | 'trust' }) { const { t } = useMarket(); return <div className="gw-page gw-container gw-narrow"><div className="gw-breadcrumb"><Link href="/">{t('home')}</Link><span>/</span>{t(page)}</div><div className="gw-page-heading"><div className="gw-eyebrow"><span/> GW IMMOBILIER · DEMO</div><h1>{t(page)}</h1></div><div className="gw-info-copy"><p>{t(page === 'privacy' ? 'privacyText' : page === 'terms' ? 'termsText' : 'trustText')}</p><p>{t('legalNote')}</p><Link href="/contact-us" className="gw-text-link">{t('navContact')} <ArrowUpRight size={16}/></Link></div></div>; }
+export function ContactDemo() { const { t } = useMarket(); return <div className="gw-page gw-container gw-contact-layout"><div><div className="gw-eyebrow"><span/> {t('navContact')}</div><h1>{t('formTitle')}</h1><p>{t('formText')}</p><div className="gw-info-callout">{t('demoWarning')}</div></div><InquiryForm/></div>; }

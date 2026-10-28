@@ -1,0 +1,17 @@
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  // Allow the Arena/E2B live-preview host to talk to the dev server.
+  allowedDevOrigins: ['*.e2b.app', '*.arena.ai', 'localhost', '*.localhost', '127.0.0.1'],
+  images: {
+    // Remote photography is loaded directly by the browser (no paid image CDN or
+    // API key required). Local SVG artwork in /public is used as a fallback.
+    unoptimized: true,
+    remotePatterns: [
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'upload.wikimedia.org' },
+    ],
+  },
+};
+
+export default nextConfig;

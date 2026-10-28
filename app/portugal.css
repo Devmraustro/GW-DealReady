@@ -17,3 +17,4 @@
 [dir='rtl'] .market{font-family:'Noto Sans Arabic',Arial,sans-serif}
 [dir='rtl'] .market h1,[dir='rtl'] .market h2,[dir='rtl'] .market h3{font-family:'Noto Sans Arabic',Arial,sans-serif}
 .gw-ring{position:relative;border:0;transform:none}.gw-ring::before{content:'';position:absolute;inset:6px;border-radius:50%;background:white}.gw-ring span{position:relative;transform:none}
+.gw-profile-edit{display:grid;gap:13px;padding:0 21px 22px}.gw-work-filters{flex-wrap:wrap}

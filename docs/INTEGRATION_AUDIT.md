@@ -25,10 +25,17 @@
 - [x] Add Portuguese, English, French and Arabic navigation and responsive UI.
 - [x] Add plan comparison and accurately labeled local simulation (no payment or server entitlement claims).
 - [x] Test and build; test principal flows and authorization boundaries.
-- [ ] Create an isolated Vercel project and verify the deployment if hosting permissions permit.
+- [x] Create a separate Vercel demo project. Its production alias is publicly readable; the unique deployment URL retains Vercel authentication.
 
 The public demo is intentionally synthetic and is not a secure, persistent commercial workspace. Do not enter real customer data or documents.
 
 ## Demo verification notes
 
 The inherited Next.js 16.4.0 dependency was updated to 16.4.3 after the current npm audit flagged critical advisories; `npm audit fix` also updated a vulnerable development transitive dependency. The current full `npm audit --audit-level=moderate` reported zero vulnerabilities. Local production build and the browser smoke suite passed; the browser test is explicitly not a multi-user authorization test. See `docs/DEMOREADY_ARCHITECTURE.md` for integration and security gaps.
+
+
+## Isolated deployment evidence
+
+The separate project `gw-dealready-portugal-demo` was created without modifying the existing production project or its domains. Deployment `dpl_GzMjcGDxiSuZAUucYDjXop4G1pgs`, sourced from commit `f5398113502190dc0502cf49616f660c0b57a3d2`, reached Vercel `READY`. The public alias is https://gw-dealready-portugal-demo.vercel.app/; anonymous remote fetches returned the homepage, filtered catalogue, a nested property page, a seed deal page, the plans page and a not-found page. A remote image reader also fetched a sample property image. The immutable per-deployment URL redirects to Vercel login, while the production alias is public.
+
+The isolated runner cannot directly connect a browser to the Vercel host, so live JavaScript, interactive forms, responsive layout and console behavior were **not** tested remotely. Those journeys were exercised instead on the local production build with desktop and mobile Chromium. A final deployment of later committed changes must be checked separately.

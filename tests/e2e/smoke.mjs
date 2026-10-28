@@ -37,6 +37,12 @@ try {
   await form.locator('[name=email]').fill('alex@example.test');
   await form.locator('[name=origin]').fill('France');
   await form.locator('[name=arrival]').fill('2027-01-15');
+  await form.locator('[name=endDate]').fill('2027-01-01');
+  await form.getByRole('button', { name: 'Criar pedido de demonstração' }).click();
+  await expect(form.getByRole('alert')).toContainText('A data final deve ser posterior');
+  await form.locator('[name=endDate]').fill('2027-07-15');
+  await form.locator('[name=purpose]').fill('Fictional relocation');
+  await form.locator('[name=language]').selectOption('en');
   await form.locator('[name=kind]').selectOption('viewing');
   await form.locator('[name=message]').fill('A fictional viewing request.');
   await form.getByRole('button', { name: 'Criar pedido de demonstração' }).click();
@@ -44,8 +50,18 @@ try {
   await page.getByRole('link', { name: 'Abrir negócio' }).click();
   await expect(page.locator('h1:visible')).toHaveText('Alex Demo');
   const dealUrl = page.url();
+  await expect(page.locator('.gw-client-summary')).toContainText('Fictional relocation');
+  await page.getByRole('button',{name:'Editar perfil'}).click();
+  await page.locator('.gw-profile-edit [name=origin]').fill('Portugal');
+  await page.locator('.gw-profile-edit [name=endDate]').fill('2026-12-31');
+  await page.locator('.gw-profile-edit').getByRole('button',{name:'Guardar'}).click();
+  await expect(page.locator('.gw-profile-edit [role=alert]')).toContainText('A data final deve ser posterior');
+  await page.locator('.gw-profile-edit [name=endDate]').fill('2027-07-15');
+  await page.locator('.gw-profile-edit').getByRole('button',{name:'Guardar'}).click();
+  await expect(page.locator('.gw-client-summary')).toContainText('Portugal');
+  await expect(page.getByText('Perfil atualizado').first()).toBeVisible();
   await expect(page.locator('.gw-score-number')).toContainText('50');
-  check('validated viewing inquiry creates a browser-local deal');
+  check('inquiry date validation, preferred language and editable browser-local profile');
 
   const identity = page.locator('.gw-document-row').filter({ hasText: 'Identificação' });
   await identity.locator('input[type=file]').setInputFiles({name:'sample.txt',mimeType:'text/plain',buffer:Buffer.from('demo')});
@@ -69,7 +85,13 @@ try {
   await page.getByRole('button',{name:'Marcar como revisto'}).click();
   await expect(page.locator('.gw-score-number')).toContainText('67');
   await expect(page.getByText('Divergência revista').first()).toBeVisible();
-  check('synthetic discrepancy review updates readiness and timeline');
+  await page.getByRole('button',{name:'Editar perfil'}).click();
+  await page.locator('.gw-profile-edit [name=name]').fill('Claire Martin-Demo');
+  await page.locator('.gw-profile-edit').getByRole('button',{name:'Guardar'}).click();
+  await expect(page.locator('.gw-score-number')).toContainText('50');
+  await expect(page.locator('.gw-discrepancy-values')).toContainText('Claire Martin-Demo');
+  await expect(page.getByRole('button',{name:'Marcar como revisto'})).toBeVisible();
+  check('synthetic discrepancy review and profile changes update readiness and timeline');
 
   await open(page, `${base}/saved`);
   await expect(page.getByRole('heading',{name:'Apartamento da Graça'})).toBeVisible();
@@ -101,10 +123,18 @@ try {
   await open(page, `${base}/workspace/deals`);
   await page.locator('.gw-inline-search input').fill('Alex Demo');
   await expect(page.locator('.gw-data-table tbody tr')).toHaveCount(1);
+  await page.getByRole('combobox',{name:'Estado'}).selectOption('documents');
+  await page.getByRole('combobox',{name:'Tipo de negócio'}).selectOption('mid');
+  await page.getByRole('combobox',{name:'Agente'}).selectOption('Demo agent');
+  await page.getByRole('combobox',{name:'Preparação'}).selectOption('high');
+  await expect(page.locator('.gw-data-table tbody tr')).toHaveCount(1);
+  await page.getByRole('combobox',{name:'Preparação'}).selectOption('low');
+  await expect(page.locator('.gw-data-table tbody tr')).toHaveCount(0);
+  await page.getByRole('combobox',{name:'Preparação'}).selectOption('high');
   const download = page.waitForEvent('download');
   await page.getByRole('button',{name:'Exportar CSV'}).click();
   assert.equal((await download).suggestedFilename(),'gw-dealready-demo.csv');
-  check('deal search and CSV export');
+  check('deal search, status/transaction/agent/readiness filters and CSV export');
 
   await open(page, `${base}/workspace/account`);
   await page.getByRole('button',{name:'Simular plano Essencial'}).click();
@@ -133,6 +163,10 @@ try {
   await open(mobilePage,base);
   await mobilePage.getByRole('button',{name:'Abrir menu'}).click();
   await expect(mobilePage.locator('.gw-mobile-nav')).toBeVisible();
+  await mobilePage.locator('.gw-header-actions select').selectOption('en');
+  await expect(mobilePage.locator('h1:visible')).toContainText('A new place');
+  await mobilePage.locator('.gw-header-actions select').selectOption('fr');
+  await expect(mobilePage.locator('h1:visible')).toContainText('Un nouveau lieu');
   await mobilePage.locator('.gw-header-actions select').selectOption('ar');
   await expect(mobilePage.locator('html')).toHaveAttribute('dir','rtl');
   await expect(mobilePage.locator('html')).toHaveAttribute('lang','ar');
@@ -141,9 +175,12 @@ try {
   await expect(mobilePage.locator('.gw-sidebar')).toHaveClass(/is-open/);
   const overflow = await mobilePage.evaluate(()=>document.documentElement.scrollWidth > window.innerWidth + 1);
   assert.equal(overflow,false,'mobile document must not overflow horizontally');
+  await open(mobilePage,`${base}/workspace/deals/DR-2401`);
+  await mobilePage.getByRole('button',{name:'تعديل الملف'}).click();
+  assert.equal(await mobilePage.evaluate(()=>document.documentElement.scrollWidth > window.innerWidth + 1),false,'mobile profile editor must not overflow horizontally');
   if(process.env.E2E_SCREENSHOT) await mobilePage.screenshot({path:process.env.E2E_SCREENSHOT,fullPage:true});
   await mobile.close();
-  check('mobile navigation and Arabic RTL');
+  check('mobile navigation, English/French translations, Arabic RTL and profile editor layout');
 
   assert.deepEqual(errors,[],'no uncaught browser errors');
   check('no uncaught browser errors');

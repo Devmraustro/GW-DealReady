@@ -1,7 +1,7 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { marketProperties, seedDeals } from './data';
-import { defaultDocuments } from './logic';
+import { defaultDocuments, validISODate, validateInquiry } from './logic';
 import type { DemoActivity, DemoDeal, DemoInquiry, DocumentStatus, MarketLocale, MarketProperty, Plan, Transaction } from './types';
 
 type State = { version: 1; deals: DemoDeal[]; inquiries: DemoInquiry[]; properties: MarketProperty[]; favorites: string[]; compare: string[]; plan: Plan };
@@ -9,7 +9,7 @@ const STORAGE = 'gw-dealready.demo.v1';
 const initialState = (): State => ({ version: 1, deals: structuredClone(seedDeals), inquiries: [], properties: structuredClone(marketProperties), favorites: [], compare: [], plan: 'pro' });
 const makeId = () => typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const event = (action: string, detail?: string): DemoActivity => ({ id: makeId(), action, detail, at: new Date().toISOString(), actor: 'Demo agent' });
-export type InquiryInput = { name: string; email: string; origin: string; language: MarketLocale; arrival: string; endDate: string; message: string; kind: 'inquiry' | 'viewing'; propertyId: string; transaction: Transaction };
+export type InquiryInput = { name: string; email: string; origin: string; language: MarketLocale; arrival: string; endDate: string; message: string; purpose: string; kind: 'inquiry' | 'viewing'; propertyId: string; transaction: Transaction };
 
 type DemoContext = State & {
   hydrated: boolean;
@@ -20,6 +20,7 @@ type DemoContext = State & {
   simulateUpload: (dealId: string, docId: string, fileName: string) => void;
   resolveDiscrepancy: (dealId: string) => void;
   changeStage: (dealId: string, stage: DemoDeal['stage']) => void;
+  updateProfile: (dealId: string, input: Pick<DemoDeal, 'clientName' | 'email' | 'origin' | 'language' | 'arrival' | 'endDate' | 'purpose'>) => boolean;
   changeLifecycle: (dealId: string, patch: Partial<DemoDeal['lifecycle']>, detail: string) => void;
   setPlan: (plan: Plan) => void;
   addProperty: (property: MarketProperty) => void;
@@ -57,7 +58,7 @@ export function PortugalDemoProvider({ children }: { children: ReactNode }) {
   const createInquiry = useCallback((input: InquiryInput) => {
     const id = `DR-${makeId().slice(0, 8).toUpperCase()}`;
     const now = new Date().toISOString();
-    const deal: DemoDeal = { id, clientName: input.name.trim().slice(0, 100), email: input.email.trim().slice(0, 120), origin: input.origin.trim().slice(0, 80), language: input.language, propertyId: input.propertyId, transaction: input.transaction, stage: 'inquiry', agent: 'Demo agent', arrival: input.arrival, endDate: input.endDate, purpose: 'Demo', nextAction: 'Document review', documents: defaultDocuments(), discrepancy: null, lifecycle: { contract: 'not_started', checkIn: false, checkOut: false, deposit: 'not_recorded', extensionReminder: false, maintenance: false }, activities: [event('inquiry_created', input.kind)], createdAt: now };
+    const deal: DemoDeal = { id, clientName: input.name.trim().slice(0, 100), email: input.email.trim().slice(0, 120), origin: input.origin.trim().slice(0, 80), language: input.language, propertyId: input.propertyId, transaction: input.transaction, stage: 'inquiry', agent: 'Demo agent', arrival: input.arrival, endDate: input.endDate, purpose: input.purpose.trim().slice(0, 120), nextAction: 'Document review', documents: defaultDocuments(), discrepancy: null, lifecycle: { contract: 'not_started', checkIn: false, checkOut: false, deposit: 'not_recorded', extensionReminder: false, maintenance: false }, activities: [event('inquiry_created', input.kind)], createdAt: now };
     const inquiry: DemoInquiry = { id: makeId(), dealId: id, name: deal.clientName, email: deal.email, message: input.message.trim().slice(0, 1000), kind: input.kind, createdAt: now };
     setState((current) => ({ ...current, deals: [deal, ...current.deals], inquiries: [inquiry, ...current.inquiries] }));
     return id;
@@ -75,6 +76,13 @@ export function PortugalDemoProvider({ children }: { children: ReactNode }) {
     const newEvent = event('discrepancy_reviewed');
     updateDeal(dealId, (deal) => deal.discrepancy && !deal.discrepancy.resolved ? { ...deal, discrepancy: { ...deal.discrepancy, resolved: true }, activities: [newEvent, ...deal.activities] } : deal);
   }, [updateDeal]);
+  const updateProfile = useCallback((dealId: string, input: Pick<DemoDeal, 'clientName' | 'email' | 'origin' | 'language' | 'arrival' | 'endDate' | 'purpose'>) => {
+    const existing = state.deals.find((deal) => deal.id === dealId);
+    if (!existing || !validateInquiry({ name: input.clientName, email: input.email, origin: input.origin, arrival: input.arrival, propertyId: existing.propertyId }) || (input.endDate && (!validISODate(input.endDate) || input.endDate <= input.arrival)) || !['pt','en','fr','ar'].includes(input.language)) return false;
+    const newEvent = event('profile_updated');
+    updateDeal(dealId, (deal) => ({ ...deal, clientName: input.clientName.trim().slice(0,100), email: input.email.trim().slice(0,120), origin: input.origin.trim().slice(0,80), language: input.language, arrival: input.arrival, endDate: input.endDate, purpose: input.purpose.trim().slice(0,120), discrepancy: deal.discrepancy && input.clientName.trim() !== deal.clientName ? { ...deal.discrepancy, expected: input.clientName.trim().slice(0,100), resolved: false } : deal.discrepancy, activities: [newEvent, ...deal.activities] }));
+    return true;
+  }, [state.deals, updateDeal]);
   const changeStage = useCallback((dealId: string, stage: DemoDeal['stage']) => {
     const newEvent = event('stage_changed', stage);
     updateDeal(dealId, (deal) => ({ ...deal, stage, activities: [newEvent, ...deal.activities] }));
@@ -87,7 +95,7 @@ export function PortugalDemoProvider({ children }: { children: ReactNode }) {
   const addProperty = useCallback((property: MarketProperty) => setState((current) => ({ ...current, properties: [property, ...current.properties] })), []);
   const editProperty = useCallback((id: string, patch: Partial<MarketProperty>) => setState((current) => ({ ...current, properties: current.properties.map((property) => property.id === id ? { ...property, ...patch, id: property.id, slug: property.slug } : property) })), []);
   const resetDemo = useCallback(() => setState(initialState()), []);
-  const value = useMemo(() => ({ ...state, hydrated, toggleFavorite, toggleCompare, createInquiry, reviewDocument, simulateUpload, resolveDiscrepancy, changeStage, changeLifecycle, setPlan, addProperty, editProperty, resetDemo }), [state, hydrated, toggleFavorite, toggleCompare, createInquiry, reviewDocument, simulateUpload, resolveDiscrepancy, changeStage, changeLifecycle, setPlan, addProperty, editProperty, resetDemo]);
+  const value = useMemo(() => ({ ...state, hydrated, toggleFavorite, toggleCompare, createInquiry, reviewDocument, simulateUpload, resolveDiscrepancy, changeStage, updateProfile, changeLifecycle, setPlan, addProperty, editProperty, resetDemo }), [state, hydrated, toggleFavorite, toggleCompare, createInquiry, reviewDocument, simulateUpload, resolveDiscrepancy, changeStage, updateProfile, changeLifecycle, setPlan, addProperty, editProperty, resetDemo]);
   return <DemoContext.Provider value={value}>{children}</DemoContext.Provider>;
 }
 export function usePortugalDemo() {

@@ -9,6 +9,8 @@ const context = await browser.newContext({ viewport: { width: 1440, height: 900 
 const page = await context.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
+page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+page.on('response', (response) => { const url = new URL(response.url()); if (url.origin === new URL(base).origin && (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/demo/')) && response.status() >= 400) errors.push(`Asset ${response.status()}: ${url.pathname}`); });
 const check = (message) => console.log(`PASS ${message}`);
 const open = async (targetPage, url) => { await targetPage.goto(url, {waitUntil:'domcontentloaded'}); await targetPage.locator('[data-demo-ready="true"]').waitFor(); };
 try {
@@ -24,11 +26,13 @@ try {
   await expect(page.locator('.gw-property-card')).toHaveCount(2);
   await page.getByRole('link', { name: 'Ver imóvel: Apartamento da Graça' }).first().click();
   await expect(page.locator('h1:visible')).toContainText('Apartamento da Graça');
+  await expect.poll(() => page.locator('.gw-gallery img').evaluate((image) => image.complete && image.naturalWidth > 0)).toBe(true);
   await page.locator('.gw-detail-actions').getByRole('button', { name: 'Guardar favorito' }).click();
   await page.locator('.gw-detail-actions').getByRole('button', { name: 'Comparar', exact: true }).click();
   await page.getByRole('button', { name: 'Imagem seguinte' }).click();
   await expect(page.locator('.gw-gallery-label')).toContainText('2 / 2');
-  check('mid-term search, shareable filter URL, detail, gallery, favorite and comparison');
+  await expect.poll(() => page.locator('.gw-gallery img').evaluate((image) => image.complete && image.naturalWidth > 0)).toBe(true);
+  check('mid-term search, shareable filter URL, detail, loaded gallery images, favorite and comparison');
 
   const form = page.locator('.gw-inquiry-form');
   await form.getByRole('button', { name: 'Criar pedido de demonstração' }).click();
@@ -160,6 +164,8 @@ try {
   const mobile = await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   const mobilePage = await mobile.newPage();
   mobilePage.on('pageerror', (e)=>errors.push(e.message));
+  mobilePage.on('console', (message)=>{ if (message.type() === 'error') errors.push(message.text()); });
+  mobilePage.on('response', (response)=>{ const url = new URL(response.url()); if (url.origin === new URL(base).origin && (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/demo/')) && response.status() >= 400) errors.push(`Asset ${response.status()}: ${url.pathname}`); });
   await open(mobilePage,base);
   await mobilePage.getByRole('button',{name:'Abrir menu'}).click();
   await expect(mobilePage.locator('.gw-mobile-nav')).toBeVisible();
@@ -182,8 +188,8 @@ try {
   await mobile.close();
   check('mobile navigation, English/French translations, Arabic RTL and profile editor layout');
 
-  assert.deepEqual(errors,[],'no uncaught browser errors');
-  check('no uncaught browser errors');
+  assert.deepEqual(errors,[],'no uncaught browser, console, or monitored asset errors');
+  check('no uncaught browser, console, or monitored asset errors');
 } finally {
   await context.close();
   await browser.close();
